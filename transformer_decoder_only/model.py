@@ -8,15 +8,16 @@ https://github.com/openai/gpt-2/blob/master/src/model.py
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
 """
 
+import sys
+import os
 import math
-
+import yaml
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from .utils import CfgNode as CN
-
-# -----------------------------------------------------------------------------
+sys.path.append(os.getcwd())
+CONFIG = 'transformer_decoder_only/config.yaml'
 
 class NewGELU(nn.Module):
     """
@@ -32,22 +33,22 @@ class CausalSelfAttention(nn.Module):
     It is possible to use torch.nn.MultiheadAttention here but I am including an
     explicit implementation here to show that there is nothing too scary here.
     """
-
     def __init__(self, config):
         super().__init__()
-        assert config.n_embd % config.n_head == 0
+        model_type = config['model_type']
+        assert config[model_type]['n_embd'] % config[model_type]['n_head'] == 0
         # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd)
+        self.c_attn = nn.Linear(config[model_type]['n_embd'], 3 * config[model_type]['n_embd'])
         # output projection
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.c_proj = nn.Linear(config[model_type]['n_embd'], config[model_type]['n_embd'])
         # regularization
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.attn_dropout = nn.Dropout(config['attn_pdrop'])
+        self.resid_dropout = nn.Dropout(config['resid_pdrop'])
         # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
-                                     .view(1, 1, config.block_size, config.block_size))
-        self.n_head = config.n_head
-        self.n_embd = config.n_embd
+        self.register_buffer("bias", torch.tril(torch.ones(config['block_size'], config['block_size']))
+                                     .view(1, 1, config['block_size'], config['block_size']))
+        self.n_head = config[model_type]['n_head']
+        self.n_embd = config[model_type]['n_embd']
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -72,17 +73,17 @@ class CausalSelfAttention(nn.Module):
 
 class Block(nn.Module):
     """ an unassuming Transformer block """
-
     def __init__(self, config):
         super().__init__()
-        self.ln_1 = nn.LayerNorm(config.n_embd)
+        model_type = config['model_type']
+        self.ln_1 = nn.LayerNorm(config[model_type]['n_embd'])
         self.attn = CausalSelfAttention(config)
-        self.ln_2 = nn.LayerNorm(config.n_embd)
+        self.ln_2 = nn.LayerNorm(config[model_type]['n_embd'])
         self.mlp = nn.ModuleDict(dict(
-            c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd),
-            c_proj  = nn.Linear(4 * config.n_embd, config.n_embd),
+            c_fc    = nn.Linear(config[model_type]['n_embd'], 4 * config[model_type]['n_embd']),
+            c_proj  = nn.Linear(4 * config[model_type]['n_embd'], config[model_type]['n_embd']),
             act     = NewGELU(),
-            dropout = nn.Dropout(config.resid_pdrop),
+            dropout = nn.Dropout(config['resid_pdrop']),
         ))
         m = self.mlp
         self.mlpf = lambda x: m.dropout(m.c_proj(m.act(m.c_fc(x)))) # MLP forward
@@ -94,68 +95,49 @@ class Block(nn.Module):
 
 class GPT(nn.Module):
     """ GPT Language Model """
-
     @staticmethod
-    def get_default_config():
-        C = CN()
-        # either model_type or (n_layer, n_head, n_embd) must be given in the config
-        C.model_type = 'gpt'
-        C.n_layer = None
-        C.n_head = None
-        C.n_embd =  None
+    def get_default_config(config_path=CONFIG):
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+        
+        config['model_type'] = "gpt"
+
         # these options must be filled in externally
-        C.vocab_size = None
-        C.block_size = None
+        config['vocab_size'] = None
+        config['block_size'] = None
+
         # dropout hyperparameters
-        C.embd_pdrop = 0.1
-        C.resid_pdrop = 0.1
-        C.attn_pdrop = 0.1
-        return C
+        config['embd_pdrop'] = 0.1
+        config['resid_pdrop'] = 0.1
+        config['attn_pdrop'] = 0.1
+        return config
 
     def __init__(self, config):
         super().__init__()
-        assert config.vocab_size is not None
-        assert config.block_size is not None
-        self.block_size = config.block_size
+        assert config['vocab_size'] is not None
+        assert config['block_size'] is not None
+        self.block_size = config['block_size']
 
-        type_given = config.model_type is not None
-        params_given = all([config.n_layer is not None, config.n_head is not None, config.n_embd is not None])
-        assert type_given ^ params_given # exactly one of these (XOR)
-        if type_given:
-            # translate from model_type to detailed configuration
-            config.merge_from_dict({
-                # names follow the huggingface naming conventions
-                # GPT-1
-                'openai-gpt':   dict(n_layer=12, n_head=12, n_embd=768),  # 117M params
-                # GPT-2 configs
-                'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
-                'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), # 350M params
-                'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
-                'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
-                # Gophers
-                'gopher-44m':   dict(n_layer=8, n_head=16, n_embd=512),
-                # (there are a number more...)
-                # I made these tiny models up
-                'gpt-mini':     dict(n_layer=12, n_head=12, n_embd=192),
-                'gpt-micro':    dict(n_layer=4, n_head=4, n_embd=128),
-                'gpt-nano':     dict(n_layer=3, n_head=3, n_embd=48),
-                'gpt-bach':     dict(n_layer=4, n_head=8, n_embd=128),
-            }[config.model_type])
-
+        model_type = config['model_type']
+        type_given = model_type is not None
+        params_given = all([config[model_type]['n_layer'] is not None, 
+                            config[model_type]['n_head'] is not None, 
+                            config[model_type]['n_embd'] is not None])
+        #assert type_given ^ params_given  # exactly one of these (XOR)
         self.transformer = nn.ModuleDict(dict(
-            wte = nn.Embedding(config.vocab_size, config.n_embd),
-            wpe = nn.Embedding(config.block_size, config.n_embd),
-            drop = nn.Dropout(config.embd_pdrop),
-            h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-            ln_f = nn.LayerNorm(config.n_embd),
+            wte = nn.Embedding(config['vocab_size'], config[model_type]['n_embd']),
+            wpe = nn.Embedding(config['block_size'], config[model_type]['n_embd']),
+            drop = nn.Dropout(config['embd_pdrop']),
+            h = nn.ModuleList([Block(config) for _ in range(config[model_type]['n_layer'])]),
+            ln_f = nn.LayerNorm(config[model_type]['n_embd']),
         ))
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config[model_type]['n_embd'], config['vocab_size'], bias=False)
 
         # init all weights, and apply a special scaled init to the residual projections, per GPT-2 paper
         self.apply(self._init_weights)
         for pn, p in self.named_parameters():
             if pn.endswith('c_proj.weight'):
-                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
+                torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config[model_type]['n_layer']))
 
         # report number of parameters (note we don't count the decoder parameters in lm_head)
         n_params = sum(p.numel() for p in self.transformer.parameters())
@@ -252,10 +234,11 @@ class GPT(nn.Module):
 
         # create the pytorch optimizer object
         optim_groups = [
-            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config["weight_decay"]},
             {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
         ]
-        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
+        b0, b1 = train_config["betas"]["lower"], train_config["betas"]["upper"]
+        optimizer = torch.optim.AdamW(optim_groups, lr=train_config["learning_rate"], betas=(b0, b1))
         return optimizer
 
     def forward(self, idx, targets=None):
@@ -276,8 +259,8 @@ class GPT(nn.Module):
         # if we are given some desired targets also calculate the loss
         loss = None
         if targets is not None:
+            targets = torch.as_tensor(targets, dtype=torch.long)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-
         return logits, loss
 
     @torch.no_grad()

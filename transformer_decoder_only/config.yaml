@@ -1,0 +1,36 @@
+project_name: bachsformer
+device: cuda
+model_type: None
+# GPT-1
+openai_gpt: {n_layer: 12, n_head: 12, n_embd: 768}  # 117M params
+# GPT-2 configs
+gpt2: {n_layer: 12, n_head: 12, n_embd: 768}  # 124M params
+gpt2_medium: {n_layer: 24, n_head: 16, n_embd: 1024} # 350M params
+gpt2_large: {n_layer: 36, n_head: 20, n_embd: 1280} # 774M params
+gpt2_xl: {n_layer: 48, n_head: 25, n_embd: 1600} # 1558M params
+# Gophers
+gopher_44m: {n_layer: 8, n_head: 16, n_embd: 512}
+# Custom 
+gpt_mini: {n_layer: 12, n_head: 12, n_embd: 192}
+gpt_micro: {n_layer: 4, n_head: 4, n_embd: 128}
+gpt_nano: {n_layer: 3, n_head: 3, n_embd: 48}
+gpt_bach: {n_layer: 4, n_head: 8, n_embd: 128}
+
+vocab_size: None
+block_size: None
+
+embd_pdrop: 0.1
+resid_pdrop: 0.1
+attn_pdrop: 0.1
+
+trainer:
+  device: cuda
+  # dataloder parameters
+  num_workers: 4
+  # optimizer parameters
+  max_iters: None
+  batch_size: 64
+  learning_rate: 3e-4
+  betas: {lower: 0.9, upper: 0.95}
+  weight_decay: 0.1 # only applied on matmul weights
+  grad_norm_clip: 1.0

@@ -1,4 +1,3 @@
-
 import os
 import sys
 import json
@@ -8,7 +7,6 @@ from ast import literal_eval
 import numpy as np
 import torch
 
-# -----------------------------------------------------------------------------
 
 def set_seed(seed):
     random.seed(seed)

@@ -3,25 +3,27 @@ import json
 import numpy as np
 from tqdm import tqdm
 from .vq_vae import Model
-
 from .midi_tools import MidiMiniature
 
-# torch
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader,Dataset
 
+
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 class LudovicoVAE():
-    def __init__(self,config_name=None,device="mps"):
+    def __init__(self, config_name=None, device=device):
         assert config_name, "Please provide a config name" 
         self.config_name = config_name
-        self.work_dir=os.path.join("vq_vae",config_name)
-        self.device = torch.device(device)
+        self.work_dir = os.path.join("vq_vae", config_name)
+        self.device = device
         if not os.path.exists(self.work_dir):
             os.mkdir(self.work_dir)
     
-    def set_model(self, num_hiddens = 128, num_residual_hiddens = 32, num_residual_layers = 2, embedding_dim = 128, num_embeddings = 16, commitment_cost = 0.25, decay = 0.99):
+    def set_model(self, num_hiddens=128, num_residual_hiddens=32, num_residual_layers=2, 
+                  embedding_dim=128, num_embeddings=16, commitment_cost=0.25, decay=0.99):
         model = Model(num_hiddens, 
                       num_residual_layers, 
                       num_residual_hiddens,
@@ -38,12 +40,12 @@ class LudovicoVAE():
             "commitment_cost":commitment_cost,
             "decay":decay
             }
-        with open(os.path.join(self.work_dir,f"{self.config_name}.json"),"w") as outfile:
-            json.dump(config,outfile)
+        with open(os.path.join(self.work_dir, f"{self.config_name}.json"), "w") as outfile:
+            json.dump(config, outfile)
         return model
     
-    def get_model(self,state_dict_name="last"):
-        with open(os.path.join(self.work_dir,f"{self.config_name}.json")) as json_file:
+    def get_model(self, state_dict_name="last"):
+        with open(os.path.join(self.work_dir, f"{self.config_name}.json")) as json_file:
             config = json.load(json_file)
         model = Model(config["num_hiddens"], 
                       config["num_residual_layers"], 
@@ -52,10 +54,10 @@ class LudovicoVAE():
                       config["embedding_dim"],
                       config["commitment_cost"],
                       config["decay"]).to(self.device)
-        model.load_state_dict(torch.load(os.path.join(self.work_dir,f"state_dict/{state_dict_name}")))
+        model.load_state_dict(torch.load(os.path.join(self.work_dir, f"state_dict/{state_dict_name}")))
         return model
     
-    def codebooks2vocab(self,model,seq_len=192,tune_name=""):
+    def codebooks2vocab(self, model, seq_len=192, tune_name=""):
         model.eval()
         work_dir = "data/midi/"
         miniaturizer = MidiMiniature(1) # 1/4th
@@ -81,12 +83,12 @@ class LudovicoVAE():
                 f.write(f"{sequence}")
                 f.write(f"\n")
         f.close()
-            
+           
 
 class MidiDataset(Dataset):
-    def __init__(self,quarters):
-        self.data = np.reshape(np.array(quarters),
-                              (len(quarters), 1, quarters[0].shape[0], quarters[0].shape[1]))
+    def __init__(self, quarters):
+        self.data = np.reshape(np.array(quarters), 
+                               (len(quarters), 1, quarters[0].shape[0], quarters[0].shape[1]))
 
     def __len__(self):
         return len(self.data)
@@ -94,8 +96,9 @@ class MidiDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
+
 class TrainerVQVAE():
-    def __init__(self,model,config_name=None,batch_size=512,device="mps"):
+    def __init__(self, model, config_name=None, batch_size=512, device=device):
         assert config_name, "Please provide a config name" 
         self.config_name = config_name
         self.model = model
@@ -103,25 +106,27 @@ class TrainerVQVAE():
         self.validation_data = []
         self.batch_size = batch_size
         self.dtype = torch.float
-        self.device = torch.device(device)
-        self.training_loader = None; self.validation_loader=None
+        self.device = device
+        self.training_loader = None
+        self.validation_loader = None
     
-    def augmentation(self,m,axis):
-        if axis>=0:m=np.flip(m,axis=axis)
+    def augmentation(self, m, axis):
+        if axis >= 0:
+            m = np.flip(m, axis=axis)
         augmented = []
         try:
             up_limit = np.where(m)[0].min()
             down_limit = np.where(m)[0].max()
         except:
             up_limit = 0; down_limit = 0
-        for i in range(1,up_limit+1):
-            augmented.append(np.vstack( (m[i:,:],np.zeros([i,32])) ))
+        for i in range(1, up_limit+1):
+            augmented.append(np.vstack((m[i:, :], np.zeros([i, 32]))))
         if down_limit:
-            for i in range(1,m.shape[0]-down_limit):
-                augmented.append(np.vstack( (np.zeros([i,32]),m[:-i,:]) ))
+            for i in range(1, m.shape[0] - down_limit):
+                augmented.append(np.vstack((np.zeros([i, 32]), m[:-i, :])))
         return augmented
 
-    def load_data(self,augmentation=False):
+    def load_data(self, augmentation=False):
         # load midi data
         work_dir = "data/midi/"
         miniaturizer = MidiMiniature(1) # 1/4th
@@ -129,26 +134,27 @@ class TrainerVQVAE():
         tunes = [t for t in os.listdir(work_dir) if t.split(".")[1]=="mid"]
         to_validate_later = tunes.pop()
         # training
-        for k,tune in enumerate(tunes):
-            quarters = miniaturizer.make_miniature(os.path.join(work_dir,tune))
+        for k, tune in enumerate(tunes):
+            quarters = miniaturizer.make_miniature(os.path.join(work_dir, tune))
             quarters_to_extend = quarters.copy()
             if augmentation:
                 for n in range(3):
                     axis = list(np.ones(len(quarters)).astype(int)*(n-1))
-                    augmented_quarters = list(map(self.augmentation,quarters_to_extend,axis))
+                    augmented_quarters = list(map(self.augmentation,quarters_to_extend, axis))
                     for a_q in augmented_quarters: quarters.extend(a_q)
             self.training_data.extend(quarters)
-            print(f"\rcreating training dataset. progress: {((k+1)/len(tunes)*100):.2f}%",end="")
+            print(f"\rcreating training dataset. progress: {((k+1)/len(tunes)*100):.2f}%", end="")
         print("\ncreating validation dataset")
         # validation
         for tune in [to_validate_later]:
-            quarters = miniaturizer.make_miniature(os.path.join(work_dir,tune))
+            quarters = miniaturizer.make_miniature(os.path.join(work_dir, tune))
             quarters_to_extend = quarters.copy()
             if augmentation:
                 for n in range(3):
-                    axis = list(np.ones(len(quarters)).astype(int)*(n-1))
-                    augmented_quarters = list(map(self.augmentation,quarters_to_extend,axis))
-                    for a_q in augmented_quarters: quarters.extend(a_q)
+                    axis = list(np.ones(len(quarters)).astype(int) * (n-1))
+                    augmented_quarters = list(map(self.augmentation, quarters_to_extend,axis))
+                    for a_q in augmented_quarters: 
+                        quarters.extend(a_q)
             self.validation_data.extend(quarters)
         
         print(f"\n{len(self.training_data)} samples in training set")
@@ -167,19 +173,20 @@ class TrainerVQVAE():
                                     pin_memory=True)
 
     def vq_vae_loss(self, output, target):
-            loss = nn.BCELoss(reduction='none')(output, target)
-            return torch.mean(loss)
+        loss = nn.BCELoss(reduction='none')(output, target)
+        return torch.mean(loss)
     
-    def train(self,learning_rate=1e-3,epochs=10):
+    def train(self, learning_rate=1e-3, epochs=10):
         self.get_train_loader()
-        if not os.path.exists(f"vq_vae/{self.config_name}/state_dict"):os.mkdir(f"vq_vae/{self.config_name}/state_dict")
+        if not os.path.exists(f"vq_vae/{self.config_name}/state_dict"):
+            os.mkdir(f"vq_vae/{self.config_name}/state_dict")
         optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False)
         self.model.train()
         train_res_recon_error = []
         train_res_perplexity = []
         valid_res_recon_error = []
         best_score = 9999
-        num_training_updates = epochs*self.training_data.__len__()
+        num_training_updates = epochs * self.training_data.__len__()
 
         for i in range(num_training_updates):
             self.model.train()
@@ -196,7 +203,7 @@ class TrainerVQVAE():
             train_res_perplexity.append(perplexity.item())
             print(f"\repoch: {i//self.training_data.__len__()} | progress: {((i+1)%self.training_data.__len__())/self.training_data.__len__()*100:.2f}% | recon_error: {np.mean(train_res_recon_error[-100:]):-4f} | perplexity : {np.mean(train_res_perplexity[-100:]):.4f}",end='')
             
-            if not i%self.training_data.__len__():
+            if not i % self.training_data.__len__():
                 print("\nValidation")
                 with torch.no_grad():
                     self.model.eval()
@@ -209,12 +216,10 @@ class TrainerVQVAE():
                         pred = np.round(valid_reconstructions.data.cpu().detach().numpy().squeeze())
                         true = np.round(valid_originals.data.cpu().detach().numpy().squeeze())
                         # we use SSE to evaluate reconstruction in validation
-                        valid_recon_error = np.mean((true-pred)**2)
+                        valid_recon_error = np.mean((true - pred)**2)
                         valid_res_recon_error.append(valid_recon_error)
                     print(f"validation recon_error: {np.mean(valid_res_recon_error):.4f}\n")
-                    if np.mean(valid_res_recon_error)<best_score:
-                        torch.save(self.model.state_dict(),f"vq_vae/{self.config_name}/state_dict/best")
+                    if np.mean(valid_res_recon_error) < best_score:
+                        torch.save(self.model.state_dict(), f"vq_vae/{self.config_name}/state_dict/best")
                         best_score = np.mean(valid_res_recon_error)
-            torch.save(self.model.state_dict(),f"vq_vae/{self.config_name}/state_dict/last")
-
-            
+            torch.save(self.model.state_dict(), f"vq_vae/{self.config_name}/state_dict/last")

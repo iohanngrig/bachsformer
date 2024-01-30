@@ -5,7 +5,7 @@ from transformer_decoder_only.model import GPT
 from transformer_decoder_only.trainer import Trainer
 
 class CodebooksDataset(Dataset):
-    def __init__(self,device):
+    def __init__(self, device):
         codebooks = self.get_codebooks()
         self.data = np.array(codebooks)
         self.device = device
@@ -45,14 +45,19 @@ def batch_end_callback(trainer):
     print(f"\riter {trainer.iter_num}: train loss {trainer.loss.item():.5f}",end="")
     torch.save(model.state_dict(),"bachsformer")
 
+
 if __name__=="__main__":
-    dtype = torch.float
-    device = torch.device("mps")
+    import torch
+    dtype = torch.float32
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     config_name = "ludovico-mini"
     ludovico_vae = LudovicoVAE(config_name)
+    print(f"*** Train Transformer with config: {config_name}***")
+
     # get model
     try:
         model = ludovico_vae.get_model()
+        print(f"Existing model {config_name} is restored")
     except:
         print(f"No model found with this configuration: {config_name}")
     # get vocab
@@ -62,11 +67,12 @@ if __name__=="__main__":
     
     # create a GPT instance
     model_config = GPT.get_default_config()
-    model_config.model_type = 'gpt-bach'
+    model_config["model_type"] = 'gpt_bach'
     print(f"vocab_size: {train_dataset.get_vocab_size()}")
     print(f"block_size: {train_dataset.get_block_size()}")
-    model_config.vocab_size = train_dataset.get_vocab_size()
-    model_config.block_size = train_dataset.get_block_size()
+    model_config["vocab_size"] = train_dataset.get_vocab_size()
+    model_config["block_size"] = train_dataset.get_block_size()
+    
     #model
     model = GPT(model_config).to(device)
     model_name = "bachsformer"
@@ -75,16 +81,18 @@ if __name__=="__main__":
     batch_size = 128
     steps_per_epoch = train_dataset.__len__()//batch_size
     train_config = Trainer.get_default_config()
-    train_config.learning_rate = 1e-3 # the model we're using is so small that we can go a bit faster
-    train_config.max_iters = steps_per_epoch*500
-    train_config.num_workers = 0
-    train_config.device=device
-    train_config.batch_size = batch_size
+    train_config["learning_rate"] = 1e-3 # the model we're using is so small that we can go a bit faster
+    train_config["max_iters"] = steps_per_epoch * 500
+    train_config["num_workers"] = 0
+    train_config["device"] = device
+    train_config["batch_size"] = batch_size
     trainer = Trainer(train_config, model, train_dataset)
+    
     try:
         model.load_state_dict(torch.load(model_name))
-        print("model loaded from pretrained")
-    except: pass
+        print(f"Model loaded from pretrained {model_name}")
+    except Exception as e: 
+        print(f"Model {model_name} is not pretrained: {e}")
 
     # train
     trainer.set_callback('on_batch_end', batch_end_callback)
