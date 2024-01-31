@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 from scipy.signal import gaussian as gaussian
-from mido import MidiFile,tempo2bpm,tick2second
+from mido import MidiFile
 import mido
 
 class Midi():

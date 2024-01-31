@@ -5,6 +5,7 @@ from vq_vae.tools import LudovicoVAE, MidiMiniature
 from transformer_decoder_only.model import GPT
 import argparse
 from time import gmtime, strftime
+from transformer_decoder_only.utils import set_seed
 
 now = strftime("%Y_%m_%d_%H_%M", gmtime())
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -21,13 +22,7 @@ def generate_from_idx(model, idx, seed=None):
     num_embeddings = model._vq_vae._num_embeddings
     embedding = model._vq_vae._embedding
     if seed:
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-        else:
-            torch.manual_seed(seed)
+        set_seed(seed)
     encoding_indices = torch.tensor(idx, device=device).unsqueeze(1)  
     encodings = torch.zeros(encoding_indices.shape[0], 
                             num_embeddings, 
@@ -35,32 +30,27 @@ def generate_from_idx(model, idx, seed=None):
     encodings.scatter_(1, encoding_indices, 1)
 
     # Quantize and unflatten
-    quantized = torch.matmul(encodings, embedding.weight).view(torch.Size([1, 8, 2, 128])) #TODO 126 was 256
+    quantized = torch.matmul(encodings, embedding.weight).view(torch.Size([1, 8, 2, 128])) #TODO 128 was 256
     quantized = quantized.detach().permute(0, 3, 1, 2).contiguous()
     return model._decoder(quantized)
 
 
 if __name__ == "__main__":
+    import sys, os
+    sys.path.append(os.getcwd())
+    CONFIG = 'transformer_decoder_only/config.yaml'
+    
     print("Using torch", torch.__version__)
     print("Device", device)
 
     args = parser.parse_args()
-    random.seed(args.seed)
-    dtype = torch.float32
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    else:
-        torch.manual_seed(args.seed)
+    set_seed(args.seed)
 
-    config_name = "ludovico-mini"
-    ludovico_vae = LudovicoVAE(config_name, device=device)
+    ludovico_vae = LudovicoVAE(config_path=CONFIG)
     try:
         model = ludovico_vae.get_model()
     except Exception as e:
-        print(f"Exception {e}. No model found with this configuration: {config_name}")
+        print(f"Exception {e}. No model found with this configuration: {ludovico_vae.config_name}")
 
     # create a GPT instance
     gpt_model_config = GPT.get_default_config()
@@ -98,7 +88,7 @@ if __name__ == "__main__":
         first_idx = f"from_input_{file_name}"
         x = torch.tensor(ludovico_vae.codebooks2vocab(model, tune_name=args.file), device=device).unsqueeze(0)
         generated = []
-        for k in range(16 * 4):
+        for k in range(16 * 4): #TODO justify why can multiply by 4
             if not k:
                 codebooks_idx = gpt_model.generate(x, 192 - x.shape[0], do_sample=True, top_k=args.top_key, temperature=args.temperature)
             else:
@@ -109,7 +99,6 @@ if __name__ == "__main__":
             quarters = np.array([codebooks_idx[i*16:i*16+16] for i in range(8)])
             for q in quarters:
                 generated.append(q)
-
     bars_generated = []
     for c in generated:
         new = np.round(generate_from_idx(model, c, seed=None).data.cpu().detach().numpy().squeeze())

@@ -275,5 +275,4 @@ class Model(nn.Module):
         z = self._pre_vq_conv(z)
         loss, quantized, perplexity, _ = self._vq_vae(z)
         x_recon = self._decoder(quantized)
-
         return loss, x_recon, perplexity

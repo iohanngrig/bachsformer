@@ -1,29 +1,38 @@
-import os
 import json
+import yaml
 import numpy as np
 from tqdm import tqdm
 from .vq_vae import Model
 from .midi_tools import MidiMiniature
-
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader,Dataset
+from torch.utils.data import DataLoader, Dataset
 
-
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 class LudovicoVAE():
-    def __init__(self, config_name=None, device=device):
-        assert config_name, "Please provide a config name" 
-        self.config_name = config_name
-        self.work_dir = os.path.join("vq_vae", config_name)
-        self.device = device
+    def __init__(self, config_path):
+        with open(config_path) as fh:
+            config = yaml.safe_load(fh)
+        self.config_name = config["config_name"]
+        self.config = config[self.config_name]
+    
+        assert self.config_name, "Please inlcude config_name in a config.yaml file" 
+        self.work_dir = os.path.join("vq_vae", self.config_name)
+        self.device = self.config["device"]
         if not os.path.exists(self.work_dir):
             os.mkdir(self.work_dir)
     
-    def set_model(self, num_hiddens=128, num_residual_hiddens=32, num_residual_layers=2, 
-                  embedding_dim=128, num_embeddings=16, commitment_cost=0.25, decay=0.99):
+    def set_model(self):
+        num_hiddens = self.config["num_hiddens"]
+        num_residual_hiddens = self.config["num_residual_hiddens"]
+        num_residual_layers = self.config["num_residual_layers"]
+        embedding_dim = self.config["embedding_dim"]
+        num_embeddings = self.config["num_embeddings"]
+        commitment_cost = self.config["commitment_cost"]
+        decay = self.config["decay"]
+        
         model = Model(num_hiddens, 
                       num_residual_layers, 
                       num_residual_hiddens,
@@ -98,15 +107,20 @@ class MidiDataset(Dataset):
 
 
 class TrainerVQVAE():
-    def __init__(self, model, config_name=None, batch_size=512, device=device):
-        assert config_name, "Please provide a config name" 
-        self.config_name = config_name
+    def __init__(self, config_path, model):
+        with open(config_path) as fh:
+            config = yaml.safe_load(fh)
+        self.config = config["va_vae_trainer"]
+        self.config_name = config["config_name"]
+        assert self.config_name, "Please provide a config name in config.yaml file" 
         self.model = model
+        self.batch_size = self.config['batch_size']
+        self.learning_rate = self.config['learning_rate']
+        self.epochs = self.config["epochs"]
+        self.device = self.config["device"]
+        self.dtype = torch.float32
         self.training_data = []
         self.validation_data = []
-        self.batch_size = batch_size
-        self.dtype = torch.float
-        self.device = device
         self.training_loader = None
         self.validation_loader = None
     
@@ -130,7 +144,6 @@ class TrainerVQVAE():
         # load midi data
         work_dir = "data/midi/"
         miniaturizer = MidiMiniature(1) # 1/4th
-
         tunes = [t for t in os.listdir(work_dir) if t.split(".")[1]=="mid"]
         to_validate_later = tunes.pop()
         # training
@@ -156,7 +169,6 @@ class TrainerVQVAE():
                     for a_q in augmented_quarters: 
                         quarters.extend(a_q)
             self.validation_data.extend(quarters)
-        
         print(f"\n{len(self.training_data)} samples in training set")
         print(f"{len(self.validation_data)} samples in validation set\n")
     
@@ -168,7 +180,7 @@ class TrainerVQVAE():
                                     shuffle=True,
                                     pin_memory=True)                
         self.validation_loader = DataLoader(self.validation_data,
-                                    batch_size=128,
+                                    batch_size=self.batch_size,
                                     shuffle=True,
                                     pin_memory=True)
 
@@ -176,22 +188,23 @@ class TrainerVQVAE():
         loss = nn.BCELoss(reduction='none')(output, target)
         return torch.mean(loss)
     
-    def train(self, learning_rate=1e-3, epochs=10):
+    def train(self):
         self.get_train_loader()
         if not os.path.exists(f"vq_vae/{self.config_name}/state_dict"):
             os.mkdir(f"vq_vae/{self.config_name}/state_dict")
-        optimizer = optim.Adam(self.model.parameters(), lr=learning_rate, amsgrad=False)
+        optimizer = optim.Adam(self.model.parameters(), 
+                               lr=self.learning_rate, amsgrad=False)
         self.model.train()
         train_res_recon_error = []
         train_res_perplexity = []
         valid_res_recon_error = []
-        best_score = 9999
-        num_training_updates = epochs * self.training_data.__len__()
+        best_score = np.inf
+        num_training_updates = self.epochs * self.training_data.__len__()
 
         for i in range(num_training_updates):
             self.model.train()
             data = next(iter(self.training_loader))
-            data = data.to(torch.float32)
+            data = data.to(self.dtype)
             data = data.to(self.device)
             optimizer.zero_grad()
             vq_loss, data_recon, perplexity = self.model(data)

@@ -1,10 +1,9 @@
-torch
-torchvision
 matplotlib
+mido
 numpy
 scipy
 six
-umap-learn
+torch
+torchvision
 tqdm
-scipy
-mido
+umap-learn

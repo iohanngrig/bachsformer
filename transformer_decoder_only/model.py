@@ -7,17 +7,13 @@ https://github.com/openai/gpt-2/blob/master/src/model.py
 2) huggingface/transformers PyTorch implementation:
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
 """
-
-import sys
-import os
+import sys, os
 import math
 import yaml
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-sys.path.append(os.getcwd())
-CONFIG = 'transformer_decoder_only/config.yaml'
 
 class NewGELU(nn.Module):
     """
@@ -96,20 +92,11 @@ class Block(nn.Module):
 class GPT(nn.Module):
     """ GPT Language Model """
     @staticmethod
-    def get_default_config(config_path=CONFIG):
+    def get_default_config():
+        sys.path.append(os.getcwd())
+        config_path = 'transformer_decoder_only/config.yaml'
         with open(config_path) as f:
             config = yaml.safe_load(f)
-        
-        config['model_type'] = "gpt"
-
-        # these options must be filled in externally
-        config['vocab_size'] = None
-        config['block_size'] = None
-
-        # dropout hyperparameters
-        config['embd_pdrop'] = 0.1
-        config['resid_pdrop'] = 0.1
-        config['attn_pdrop'] = 0.1
         return config
 
     def __init__(self, config):
@@ -123,6 +110,7 @@ class GPT(nn.Module):
         params_given = all([config[model_type]['n_layer'] is not None, 
                             config[model_type]['n_head'] is not None, 
                             config[model_type]['n_embd'] is not None])
+        #TODO understand why one needs to pass the asserion below
         #assert type_given ^ params_given  # exactly one of these (XOR)
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config['vocab_size'], config[model_type]['n_embd']),
@@ -192,7 +180,6 @@ class GPT(nn.Module):
                 assert sd_hf[k].shape == sd[k].shape
                 with torch.no_grad():
                     sd[k].copy_(sd_hf[k])
-
         return model
 
     def configure_optimizers(self, train_config):
@@ -202,7 +189,6 @@ class GPT(nn.Module):
         weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
         We are then returning the PyTorch optimizer object.
         """
-
         # separate out all parameters to those that will and won't experience regularizing weight decay
         decay = set()
         no_decay = set()
@@ -290,5 +276,4 @@ class GPT(nn.Module):
                 _, idx_next = torch.topk(probs, k=1, dim=-1)
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
-
         return idx

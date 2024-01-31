@@ -1,7 +1,13 @@
 .ipynb_checkpoints/
-__pycache__/
-*.swp
-.env
 .pylintrc
 .DS_Store
 .mypy_cache/
+__pycache__/
+
+*.swp
+.env
+
+*.log
+*.png
+
+midi2audio2video.py

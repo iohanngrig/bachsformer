@@ -2,27 +2,18 @@
 Simple training loop; Boilerplate that could apply to any arbitrary neural network,
 so nothing in this file really has anything to do with GPT specifically.
 """
-import sys
-import os
 import time
 import yaml
 from collections import defaultdict
-
 import torch
 from torch.utils.data.dataloader import DataLoader
 
-sys.path.append(os.getcwd())
-CONFIG = 'transformer_decoder_only/config.yaml'
 
 class Trainer:
-    @staticmethod
-    def get_default_config(config_path=CONFIG):
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-        return config["trainer"]
-
-    def __init__(self, config, model, train_dataset):
-        self.config = config
+    def __init__(self, config_path, model, train_dataset):
+        with open(config_path) as fh:
+            config = yaml.safe_load(fh)
+        self.config = config["trainer"]
         self.model = model
         self.optimizer = None
         self.train_dataset = train_dataset
@@ -46,26 +37,26 @@ class Trainer:
         for callback in self.callbacks.get(onevent, []):
             callback(self)
     
-    def trainloader_setup(self, config):
+    def trainloader_setup(self):
         self.train_dataset.shuffle_it()
         # setup the dataloader
         train_loader = DataLoader(
             self.train_dataset,
-            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=self.train_dataset.__len__()),
+            sampler=torch.utils.data.RandomSampler(self.train_dataset, 
+                                                   replacement=True, 
+                                                   num_samples=self.train_dataset.__len__()),
             shuffle=False,
             pin_memory=True,
-            batch_size=config["batch_size"],
-            num_workers=config["num_workers"],
+            batch_size=self.config["batch_size"],
+            num_workers=self.config["num_workers"],
         )
         return train_loader
 
     def run(self):
-        model, config = self.model, self.config
-        train_loader = self.trainloader_setup(config)
+        train_loader = self.trainloader_setup()
         # setup the optimizer
-        self.optimizer = model.configure_optimizers(config)
-
-        model.train()
+        self.optimizer = self.model.configure_optimizers(self.config)
+        self.model.train()
         self.iter_num = 0
         self.iter_time = time.time()
         data_iter = iter(train_loader)
@@ -74,19 +65,20 @@ class Trainer:
             try:
                 batch = next(data_iter)
             except StopIteration:
-                train_loader = self.trainloader_setup(config)
+                train_loader = self.trainloader_setup()
                 data_iter = iter(train_loader)
                 batch = next(data_iter)
             batch = [t.to(self.device) for t in batch]
             x, y = batch
 
             # forward the model
-            logits, self.loss = model(x, y)
+            logits, self.loss = self.model(x, y)
 
             # backprop and update the parameters
-            model.zero_grad(set_to_none=True)
+            self.model.zero_grad(set_to_none=True)
             self.loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_norm_clip"])
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 
+                                           self.config["grad_norm_clip"])
             self.optimizer.step()
 
             self.trigger_callbacks('on_batch_end')
@@ -96,5 +88,5 @@ class Trainer:
             self.iter_time = tnow
 
             # termination conditions
-            if config["max_iters"] is not None and self.iter_num >= config["max_iters"]:
+            if self.config["max_iters"] is not None and self.iter_num >= self.config["max_iters"]:
                 break
