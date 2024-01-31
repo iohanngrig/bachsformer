@@ -133,6 +133,5 @@ class MidiMiniature(Midi):
         for e in events:
             t = e[0] - prev; prev = e[0]
             track.append(mido.Message(e[1],note=e[2]+21, velocity=100, time=t))
-            
         midi_file.tracks.append(track)
         return midi_file

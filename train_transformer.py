@@ -53,7 +53,7 @@ if __name__ == "__main__":
     from transformer_decoder_only.trainer import Trainer
 
     sys.path.append(os.getcwd())
-    CONFIG = 'transformer_decoder_only/config.yaml'
+    CONFIG = 'config.yaml'
     
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     ludovico_vae = LudovicoVAE(config_path=CONFIG)

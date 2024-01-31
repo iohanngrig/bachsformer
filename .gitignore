@@ -8,6 +8,8 @@ __pycache__/
 .env
 
 *.log
+
+images
 *.png
 
 midi2audio2video.py

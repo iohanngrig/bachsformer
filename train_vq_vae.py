@@ -4,7 +4,7 @@ from vq_vae.tools import LudovicoVAE, TrainerVQVAE
 if __name__=="__main__":
     import sys, os
     sys.path.append(os.getcwd())
-    CONFIG = 'transformer_decoder_only/config.yaml'
+    CONFIG = 'config.yaml'
 
     ludovico_vae = LudovicoVAE(config_path=CONFIG)
     print(f"*** Train VQ VAE with config: {ludovico_vae.config_name} ***")

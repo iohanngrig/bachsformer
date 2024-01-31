@@ -94,7 +94,7 @@ class GPT(nn.Module):
     @staticmethod
     def get_default_config():
         sys.path.append(os.getcwd())
-        config_path = 'transformer_decoder_only/config.yaml'
+        config_path = 'config.yaml'
         with open(config_path) as f:
             config = yaml.safe_load(f)
         return config

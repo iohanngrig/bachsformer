@@ -38,7 +38,7 @@ def generate_from_idx(model, idx, seed=None):
 if __name__ == "__main__":
     import sys, os
     sys.path.append(os.getcwd())
-    CONFIG = 'transformer_decoder_only/config.yaml'
+    CONFIG = 'config.yaml'
     
     print("Using torch", torch.__version__)
     print("Device", device)
