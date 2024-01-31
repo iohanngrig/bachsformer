@@ -12,4 +12,6 @@ __pycache__/
 images
 *.png
 
+data/generated/*
+trained_models
 midi2audio2video.py

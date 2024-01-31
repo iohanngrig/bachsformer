@@ -1,7 +1,9 @@
+import os
 import numpy as np
 from torch.utils.data import Dataset
 import torch
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 class CodebooksDataset(Dataset):
     def __init__(self, device):
@@ -43,17 +45,16 @@ class CodebooksDataset(Dataset):
 
 def batch_end_callback(trainer):
     print(f"\riter {trainer.iter_num}: train loss {trainer.loss.item():.5f}", end="")
-    torch.save(trainer.model.state_dict(), "bachsformer")
+    model_path = os.path.join(dir_path, "bachsformer.pth")
+    torch.save(trainer.model.state_dict(), model_path)
 
 
 if __name__ == "__main__":
-    import sys, os
     from vq_vae.tools import LudovicoVAE
     from transformer_decoder_only.model import GPT
     from transformer_decoder_only.trainer import Trainer
 
-    sys.path.append(os.getcwd())
-    CONFIG = 'config.yaml'
+    CONFIG = os.path.join(dir_path, 'config.yaml')
     
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     ludovico_vae = LudovicoVAE(config_path=CONFIG)

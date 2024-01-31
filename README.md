@@ -4,6 +4,9 @@ This is a modified version of the original work by [Pierfrancesco Melucci](https
 
 Notice that the generated music is somewhat "fluent" sequence of musical "phrases" used by Bach in "Goldberg Variations". In some sense the model treats the music as a spoken text, which should not be surprising since the network is based on a GPT model.
 
+[![Watch the video](https://img.youtube.com/vi/eD-PVXEj9lI/hqdefault.jpg)](https://www.youtube.com/watch?v=eD-PVXEj9lI)
+
+
 ## Music Generation
 
 * Many attempts have been made to generate music through artificial intelligence. 
