@@ -1,9 +1,16 @@
-config_name: ludovico_mini
 device: cuda
+config_name: ludovico_mini    # vq_vae model
 
-# default_config
-model_type: gpt
-gpt: {n_layer: None, n_head: None, n_embd: None}
+# gpt model default config
+model_type: gpt_bach2          # used gpt like model 
+model_name: bachsformer.pth    # transformer state dict
+
+vocab_size: 16
+block_size: 191
+
+embd_pdrop: 0.1
+resid_pdrop: 0.1
+attn_pdrop: 0.1
 
 # GPT-1
 openai_gpt: {n_layer: 12, n_head: 12, n_embd: 768}  # 117M params
@@ -18,17 +25,12 @@ gopher_44m: {n_layer: 8, n_head: 16, n_embd: 512}
 gpt_mini: {n_layer: 12, n_head: 12, n_embd: 192}
 gpt_micro: {n_layer: 4, n_head: 4, n_embd: 128}
 gpt_nano: {n_layer: 3, n_head: 3, n_embd: 48}
+gpt_bach: {n_layer: 4, n_head: 8, n_embd: 128}
 
-gpt_bach_old: {n_layer: 4, n_head: 8, n_embd: 128}
-gpt_bach: {n_layer: 8, n_head: 16, n_embd: 256}
+# updated transformer model, with larger number of n_embd, larger models are hard to train on a single GPU
+gpt_bach2: {n_layer: 4, n_head: 8, n_embd: 200}
 
-vocab_size: None
-block_size: None
-
-embd_pdrop: 0.1
-resid_pdrop: 0.1
-attn_pdrop: 0.1
-
+# this is the original vq_vae model
 ludovico_mini_old:
   device: cuda
   num_hiddens: 128
@@ -39,12 +41,13 @@ ludovico_mini_old:
   commitment_cost: 0.25
   decay: 0.99
 
+# new version of vq_vae model, kept the name
 ludovico_mini:
   device: cuda
   num_hiddens: 256
-  num_residual_layers: 4
+  num_residual_layers: 2
   num_residual_hiddens: 64
-  num_embeddings: 32
+  num_embeddings: 16
   embedding_dim: 256
   commitment_cost: 0.25
   decay: 0.99
@@ -52,12 +55,12 @@ ludovico_mini:
 trainer:
   device: cuda
   # dataloder parameters
-  num_workers: 8
+  num_workers: 4
   # optimizer parameters
   max_iters: None
-  multiplier: 500
+  multiplier: 100  # recommend > 20 x num midis
   batch_size: 128
-  learning_rate: 0.001
+  learning_rate: 0.00001
   betas: {lower: 0.9, upper: 0.95}
   weight_decay: 0.1 # only applied on matmul weights
   grad_norm_clip: 1.0
@@ -65,5 +68,5 @@ trainer:
 va_vae_trainer:
   device: cuda
   batch_size: 128
-  learning_rate: 0.001
-  epochs: 20
+  learning_rate: 0.0001
+  epochs: 30  # recommend > num midis
