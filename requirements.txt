@@ -3,6 +3,7 @@ mido
 numpy
 scipy
 six
+tensorboard
 torch
 torchvision
 tqdm

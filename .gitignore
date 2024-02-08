@@ -1,5 +1,6 @@
 .ipynb_checkpoints/
 .pylintrc
+.mscbackup
 .DS_Store
 .mypy_cache/
 __pycache__/
@@ -12,9 +13,15 @@ __pycache__/
 images
 *.png
 
-data/arxive
-data/generated/*.mp3
-data/generated/*.mp4
-trained_models
+old/
+arxive/
+generated/*.mp3
+generated/*.mp4
+generated/*.mscz
+
+runs/log_vae/*
+runs/log_transformer/*
+trained_models/
+
 get_midi_info.py
 midi2audio2video.py

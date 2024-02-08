@@ -7,6 +7,7 @@ import yaml
 from collections import defaultdict
 import torch
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Trainer:
@@ -52,12 +53,15 @@ class Trainer:
         return train_loader
 
     def run(self):
+        self.model.train()
         train_loader = self.trainloader_setup()
+
         # setup the optimizer
         self.optimizer = self.model.configure_optimizers(self.config)
-        self.model.train()
         self.iter_num = 0
-        self.iter_time = time.time()
+
+        writer = SummaryWriter('runs/log_transformer')
+
         data_iter = iter(train_loader)
         while True:
             # fetch the next batch (x, y) and re-init iterator if needed
@@ -72,19 +76,19 @@ class Trainer:
 
             # forward the model
             logits, self.loss = self.model(x, y)
+            
+            writer.add_scalar('training_loss', self.loss.cpu().item(), global_step=self.iter_num+1)
 
             # backprop and update the parameters
-            self.model.zero_grad(set_to_none=True)
+            self.optimizer.zero_grad()
             self.loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config["grad_norm_clip"])
             self.optimizer.step()
 
             self.trigger_callbacks('on_batch_end')
             self.iter_num += 1
-            tnow = time.time()
-            self.iter_dt = tnow - self.iter_time
-            self.iter_time = tnow
 
             # termination conditions
             if self.config["max_iters"] is not None and self.iter_num >= self.config["max_iters"]:
+                writer.close()
                 break

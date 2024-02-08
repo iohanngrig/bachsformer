@@ -123,7 +123,6 @@ class MidiMiniature(Midi):
         midi_file.tracks.append(track)
         track = mido.MidiTrack()
         # write messages
-        n_bars = len(bars)
         bars = np.concatenate(bars, axis=1)
         events = []
         prev = 0
@@ -132,7 +131,7 @@ class MidiMiniature(Midi):
             note_diff = np.diff(note)
             # notes on
             notes_on = np.where(note_diff == 1)[0]
-            for grid_idx in notes_on: 
+            for grid_idx in notes_on:
                 grid_idx = round(grid_idx * self.compress_ratio)
                 events.append((grid_idx, 'note_on', note_idx))
             # notes off
@@ -145,6 +144,5 @@ class MidiMiniature(Midi):
             t = e[0] - prev
             prev = e[0]
             track.append(mido.Message(e[1], note=e[2]+21, velocity=100, time=t))
-        
         midi_file.tracks.append(track)
         return midi_file

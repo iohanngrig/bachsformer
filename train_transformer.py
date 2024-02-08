@@ -1,19 +1,31 @@
 import os
+import yaml
 import torch
 from utils.midi_dataset import CodebooksDataset
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 CONFIG = os.path.join(dir_path, 'config.yaml')
-MODEL_TYPE = "gpt_bach2"
-MODEL_NAME = "bachsformer.pth"
+
+with open(CONFIG, "r", encoding='utf8') as fh:
+    config = yaml.safe_load(fh)
+
+MODEL_TYPE = config["model_type"]  # "gpt_bach2"
+MODEL_NAME = config["model_name"]  # "bachsformer.pth"
+
 MODEL_PATH = os.path.join(dir_path, MODEL_NAME)
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
 def batch_end_callback(trainer):
+    """ Saves the model weighs when this callback is triggered.
+        Note: Just using torch.save will return immediately, fh will be closed
+        and the thread will be unable to write to the file. Using "with"
+        context manager helps to resolve this issue, ensuring that the file
+        stream process doesn't block other processes."""
     print(f"\riter {trainer.iter_num}: train loss {trainer.loss.item():.5f}", end="")
-    torch.save(trainer.model.state_dict(), MODEL_PATH)
+    with open(MODEL_PATH, 'wb') as fh:
+        torch.save(trainer.model.state_dict(), fh)
 
 
 if __name__ == "__main__":
@@ -30,6 +42,7 @@ if __name__ == "__main__":
         print(f"Existing model {ludovico_vae.config_name} is restored")
     except Exception:
         print(f"No model found with configuration: {ludovico_vae.config_name}")
+        raise
 
     # get vocab
     ludovico_vae.codebooks2vocab(model)

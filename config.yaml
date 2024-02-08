@@ -28,7 +28,7 @@ gpt_nano: {n_layer: 3, n_head: 3, n_embd: 48}
 gpt_bach: {n_layer: 4, n_head: 8, n_embd: 128}
 
 # updated transformer model, with larger number of n_embd, larger models are hard to train on a single GPU
-gpt_bach2: {n_layer: 4, n_head: 8, n_embd: 200}
+gpt_bach2: {n_layer: 6, n_head: 10, n_embd: 200}
 
 # this is the original vq_vae model
 ludovico_mini_old:
@@ -45,7 +45,7 @@ ludovico_mini_old:
 ludovico_mini:
   device: cuda
   num_hiddens: 256
-  num_residual_layers: 2
+  num_residual_layers: 3
   num_residual_hiddens: 64
   num_embeddings: 16
   embedding_dim: 256
@@ -58,9 +58,9 @@ trainer:
   num_workers: 4
   # optimizer parameters
   max_iters: None
-  multiplier: 100  # recommend > 20 x num midis
+  multiplier: 1000  # recommend > 20 x num midis
   batch_size: 128
-  learning_rate: 0.00001
+  learning_rate: 0.00005
   betas: {lower: 0.9, upper: 0.95}
   weight_decay: 0.1 # only applied on matmul weights
   grad_norm_clip: 1.0
@@ -69,4 +69,4 @@ va_vae_trainer:
   device: cuda
   batch_size: 128
   learning_rate: 0.0001
-  epochs: 30  # recommend > num midis
+  epochs: 10  # recommend > num midis

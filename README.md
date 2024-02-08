@@ -1,6 +1,6 @@
 # bachsformer
 
-This is a modified version of the original work by [Pierfrancesco Melucci](https://github.com/pier-maker92/bachsformer.git) adjusted to work on `CUDA` device and newer version of `PyTorch` (2.2). Main parameters of the model are enclosed inside the `config.yaml` file. The model is trained on 86 works of J.S. Bach encapsulated withing the `data/midi` folder. The midi files are selected to be relatively "homogeneous". 
+This is a modified version of the original work by [Pierfrancesco Melucci](https://github.com/pier-maker92/bachsformer.git) adjusted to work on `CUDA` device and newer version of `PyTorch` (2.2). Main parameters of the model are enclosed inside the `config.yaml` file. The model is trained on 117 works of J.S. Bach encapsulated withing the `data/midi` folder. 
 
 Notice that the generated audio is somewhat "fluent" sequence of musical "phrases" used by Bach in the provided midi files. The quality of generated audio strongly depends on the `seed` argument (given that the trained model is fixed). In some sense the model treats the music as a spoken text, which should not be surprising since the network is based on a GPT model.
 
@@ -62,7 +62,7 @@ python generate.py
 
 ## Dataset
 
-The extended dataset provided for pre-trained models consist of 86 works by J.S. Bach (instead of original 32 Goldberg Variations). Midi files for training are placed inside the `data/midi` folder. You can try different/larger datasets, however, note that the midi files have to be perfectly quantized!
+The extended dataset provided for pre-trained models consist of works by J.S. Bach. Midi files for training are placed inside the `data/midi` folder. You can try different/larger datasets, however, note that the midi files have to be perfectly quantized!
 
 ## Training
 
@@ -70,10 +70,13 @@ You have to train vq-vae first and then you will able to train the transformer o
 ```bash
 python train_vq_vae.py
 ```
+monitor training by running `tensorboard --logdir runs/log_vae`
+
 train bachsformer!
 ```bash
 python train_transformer.py
 ```
+monitor training by running `tensorboard --logdir runs/log_transformer`
 
 ## Contributing
 

@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from utils.midi_tools import MidiMiniature
 from utils.midi_dataset import MidiDataset
@@ -103,6 +104,7 @@ class TrainerVQVAE():
         return torch.mean(loss)
 
     def train(self):
+        self.model.train()
         self.get_train_loader()
         state_dict_path = os.path.join(dir_path, self.config_name, "state_dict")
         if not os.path.exists(state_dict_path):
@@ -110,12 +112,12 @@ class TrainerVQVAE():
         optimizer = optim.Adam(self.model.parameters(),
                                lr=self.learning_rate,
                                amsgrad=False)
-        self.model.train()
         train_res_recon_error = []
         train_res_perplexity = []
         valid_res_recon_error = []
         best_score = np.inf
-        num_training_updates = self.epochs * self.training_data.__len__()
+        num_training_updates = self.epochs * len(self.training_data)
+        writer = SummaryWriter('runs/log_vae')
 
         for i in range(num_training_updates):
             self.model.train()
@@ -130,9 +132,14 @@ class TrainerVQVAE():
             optimizer.step()
             train_res_recon_error.append(recon_error.item())
             train_res_perplexity.append(perplexity.item())
-            print(f"\repoch: {i//self.training_data.__len__()} | progress: {((i+1)%self.training_data.__len__())/self.training_data.__len__()*100:.2f}% | recon_error: {np.mean(train_res_recon_error[-100:]):-4f} | perplexity : {np.mean(train_res_perplexity[-100:]):.4f}", end='')
 
-            if not i % self.training_data.__len__():
+            print(f"\repoch: {i // len(self.training_data)} | progress: {((i + 1) % len(self.training_data)) / len(self.training_data) * 100:.2f}% | recon_error: {np.mean(train_res_recon_error[-100:]):-4f} | perplexity : {np.mean(train_res_perplexity[-100:]):.4f}", end='')
+
+            writer.add_scalar('vq_loss', vq_loss.item(), global_step=i+1)
+            writer.add_scalar('recon_error', recon_error.item(), global_step=i+1)
+            writer.add_scalar('perplexity', perplexity.item(), global_step=i+1)
+
+            if not i % len(self.training_data):
                 print("\nValidation")
                 with torch.no_grad():
                     self.model.eval()
@@ -147,8 +154,13 @@ class TrainerVQVAE():
                         # we use SSE to evaluate reconstruction in validation
                         valid_recon_error = np.mean((true - pred)**2)
                         valid_res_recon_error.append(valid_recon_error)
-                    print(f"validation recon_error: {np.mean(valid_res_recon_error):.4f}\n")
-                    if np.mean(valid_res_recon_error) < best_score:
-                        torch.save(self.model.state_dict(), os.path.join(state_dict_path, "best.pt"))
-                        best_score = np.mean(valid_res_recon_error)
-            torch.save(self.model.state_dict(), os.path.join(state_dict_path, "last.pt"))
+                    mean_valid_res_recon_error = np.mean(valid_res_recon_error)
+                    writer.add_scalar('valid_recon_error', mean_valid_res_recon_error, global_step=i+1)
+                    print(f"validation recon_error: {mean_valid_res_recon_error:.4f}\n")
+                    if mean_valid_res_recon_error < best_score:
+                        best_score = mean_valid_res_recon_error
+                        with open(os.path.join(state_dict_path, "best.pt"), 'wb') as fh:
+                            torch.save(self.model.state_dict(), fh)
+            with open(os.path.join(state_dict_path, "last.pt"), 'wb') as fh:
+                torch.save(self.model.state_dict(), fh)
+        writer.close()
